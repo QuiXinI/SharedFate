@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "quasaris.sharedfate.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "DeathScreenMixin",
+    "PauseScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
