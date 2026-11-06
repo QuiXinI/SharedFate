@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -15,15 +18,22 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 public final class WorldStartPhase {
+    private static final Logger LOG = LoggerFactory.getLogger("SharedFate");
     private static final long TICK_MS = 50;
+    private static final int MOTD_INTERVAL_TICKS = 200;
+    private static final int CHUNKY_POLL_DELAY_TICKS = 40;
 
     public static volatile Component chunkyStatus = Component.empty();
 
     private static boolean active = false;
     private static boolean chunkyMissing = false;
     private static boolean chunkyStarted = false;
+    private static boolean chunkyDone = false;
+    private static int chunkyStartTick = 0;
+    private static volatile float chunkyPercent = 0f;
     private static long elapsedMs = 0;
     private static Path file;
+    private static String originalMotd = null;
 
     public static boolean isActive() {
         return active;
@@ -33,7 +43,10 @@ public final class WorldStartPhase {
         ServerLifecycleEvents.SERVER_STARTED.register(WorldStartPhase::onStart);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             save();
-            chunkyStarted = false;
+            if (originalMotd != null) {
+                server.setMotd(originalMotd);
+            }
+            resetChunkyState();
         });
         ServerTickEvents.END_SERVER_TICK.register(WorldStartPhase::tick);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
@@ -46,11 +59,14 @@ public final class WorldStartPhase {
     }
 
     private static void onStart(MinecraftServer server) {
+        resetChunkyState();
+        originalMotd = server.getMotd();
         if (!FabricLoader.getInstance().isModLoaded("chunky")) {
             chunkyMissing = true;
             active = false;
             return;
         }
+        chunkyMissing = false;
 
         file = server.getWorldPath(LevelResource.ROOT).resolve("sharedfate_phase.txt");
         elapsedMs = 0;
@@ -63,48 +79,15 @@ public final class WorldStartPhase {
         }
         active = elapsedMs < SharedFateConfig.getDurationMs();
         save();
+        server.setMotd(motdText());
     }
 
-    private static void startChunky(MinecraftServer server) {
-        try {
-            var chunky = org.popcraft.chunky.ChunkyProvider.get();
-            var api = chunky.getApi();
-            String worldName = SharedFateConfig.getChunkyWorld();
-            String shape = SharedFateConfig.getChunkyShape();
-            double centerX = SharedFateConfig.getChunkyCenterX();
-            double centerZ = SharedFateConfig.getChunkyCenterZ();
-            double radius = SharedFateConfig.getChunkyRadius();
-            String pattern = SharedFateConfig.getChunkyPattern();
-
-            if (!api.isRunning(worldName)) {
-                api.startTask(
-                        worldName,
-                        shape,
-                        centerX,
-                        centerZ,
-                        radius,
-                        radius,
-                        pattern
-                );
-            }
-
-            api.onGenerationProgress(event -> {
-                if (event.world().equals(worldName)) {
-                    chunkyStatus = Component.literal(String.format("Chunky: %.1f%%", event.progress()))
-                            .withStyle(ChatFormatting.AQUA);
-                }
-            });
-
-            api.onGenerationComplete(event -> {
-                if (event.world().equals(worldName)) {
-                    chunkyStatus = Component.literal("Chunky завершен").withStyle(ChatFormatting.GREEN);
-                }
-            });
-            chunkyStarted = true;
-        } catch (Throwable e) {
-            chunkyStatus = Component.literal("Chunky ошибка: " + e.getMessage()).withStyle(ChatFormatting.RED);
-            chunkyStarted = true;
-        }
+    private static void resetChunkyState() {
+        chunkyStarted = false;
+        chunkyDone = false;
+        chunkyStartTick = 0;
+        chunkyPercent = 0f;
+        chunkyStatus = Component.empty();
     }
 
     private static void tick(MinecraftServer server) {
@@ -112,8 +95,12 @@ public final class WorldStartPhase {
             return;
         }
 
-        if (!chunkyStarted) {
-            startChunky(server);
+        if (!chunkyMissing) {
+            if (!chunkyStarted) {
+                startChunky(server);
+            } else if (!chunkyDone && server.getTickCount() - chunkyStartTick > CHUNKY_POLL_DELAY_TICKS) {
+                pollChunky();
+            }
         }
 
         elapsedMs += TICK_MS;
@@ -121,13 +108,76 @@ public final class WorldStartPhase {
             end(server);
             return;
         }
+
         int t = server.getTickCount();
         if (t % 10 == 0) {
             broadcastActionBar(server, statusLine());
         }
+        if (t % MOTD_INTERVAL_TICKS == 0) {
+            server.setMotd(motdText());
+        }
         if (t % 200 == 0) {
             save();
         }
+    }
+
+    private static void startChunky(MinecraftServer server) {
+        chunkyStarted = true;
+        chunkyStartTick = server.getTickCount();
+        try {
+            var api = org.popcraft.chunky.ChunkyProvider.get().getApi();
+            String worldName = SharedFateConfig.getChunkyWorld();
+
+            if (!api.isRunning(worldName)) {
+                api.startTask(
+                        worldName,
+                        SharedFateConfig.getChunkyShape(),
+                        SharedFateConfig.getChunkyCenterX(),
+                        SharedFateConfig.getChunkyCenterZ(),
+                        SharedFateConfig.getChunkyRadius(),
+                        SharedFateConfig.getChunkyRadius(),
+                        SharedFateConfig.getChunkyPattern()
+                );
+            }
+
+            api.onGenerationProgress(event -> {
+                if (event.world().equals(worldName)) {
+                    chunkyPercent = (float) event.progress();
+                    chunkyStatus = Component.literal(String.format("Chunky: %.1f%%", event.progress()))
+                            .withStyle(ChatFormatting.AQUA);
+                }
+            });
+
+            api.onGenerationComplete(event -> {
+                if (event.world().equals(worldName)) {
+                    finishChunky();
+                }
+            });
+        } catch (Throwable e) {
+            LOG.warn("Chunky could not be started", e);
+            chunkyStatus = Component.literal("Chunky ошибка: " + e.getMessage()).withStyle(ChatFormatting.RED);
+            chunkyDone = true;
+        }
+    }
+
+    private static void pollChunky() {
+        try {
+            var api = org.popcraft.chunky.ChunkyProvider.get().getApi();
+            if (!api.isRunning(SharedFateConfig.getChunkyWorld())) {
+                finishChunky();
+            }
+        } catch (Throwable e) {
+            finishChunky();
+        }
+    }
+
+    private static void finishChunky() {
+        if (chunkyDone) {
+            return;
+        }
+        chunkyDone = true;
+        chunkyPercent = 100f;
+        chunkyStatus = Component.literal("Chunky завершен").withStyle(ChatFormatting.GREEN);
     }
 
     private static void end(MinecraftServer server) {
@@ -135,29 +185,52 @@ public final class WorldStartPhase {
         elapsedMs = SharedFateConfig.getDurationMs();
         save();
 
-        try {
-            var chunky = org.popcraft.chunky.ChunkyProvider.get();
-            if (chunky != null) {
-                var api = chunky.getApi();
-                String worldName = SharedFateConfig.getChunkyWorld();
-                if (api.isRunning(worldName)) {
-                    api.cancelTask(worldName);
-                }
-            }
-        } catch (Throwable ignored) {
+        if (chunkyStarted && !chunkyDone && !chunkyMissing) {
+            cancelChunky();
         }
+        chunkyDone = true;
         chunkyStatus = Component.empty();
 
-        broadcastActionBar(server, Component.literal("Мир запущен: мобы включены")
+        if (originalMotd != null) {
+            server.setMotd(originalMotd);
+        }
+        broadcastActionBar(server, Component.literal("Подготовка завершена: мобы включены")
                 .withStyle(ChatFormatting.GREEN));
     }
 
-    private static Component statusLine() {
+    private static void cancelChunky() {
+        try {
+            var api = org.popcraft.chunky.ChunkyProvider.get().getApi();
+            String worldName = SharedFateConfig.getChunkyWorld();
+            if (api.isRunning(worldName)) {
+                api.cancelTask(worldName);
+            }
+        } catch (Throwable e) {
+            LOG.warn("Failed to cancel Chunky task", e);
+        }
+    }
+
+    private static String motdText() {
+        if (!active) {
+            return originalMotd != null ? originalMotd : "";
+        }
+        String line = "§eПодготовка мира: " + timeLeft();
+        if (!chunkyMissing && chunkyStarted && !chunkyDone) {
+            line += String.format(" §b| Chunky %.1f%%", chunkyPercent);
+        }
+        return line;
+    }
+
+    private static String timeLeft() {
         long left = Math.max(0, (SharedFateConfig.getDurationMs() - elapsedMs) / 1000);
-        String time = String.format("%d:%02d", left / 60, left % 60);
-        Component line = Component.literal("Подготовка мира: " + time).withStyle(ChatFormatting.YELLOW);
+        return String.format("%d:%02d", left / 60, left % 60);
+    }
+
+    private static Component statusLine() {
+        Component line = Component.literal("Подготовка мира: " + timeLeft()).withStyle(ChatFormatting.YELLOW);
         if (!chunkyStatus.getString().isEmpty()) {
-            return Component.empty().append(line).append(Component.literal("  |  ").withStyle(ChatFormatting.GRAY))
+            return Component.empty().append(line)
+                    .append(Component.literal("  |  ").withStyle(ChatFormatting.GRAY))
                     .append(chunkyStatus);
         }
         return line;

@@ -10,10 +10,11 @@ import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import quasaris.sharedfate.net.DownloadRequestPayload;
 import quasaris.sharedfate.net.ReadyTogglePayload;
 
 public final class ReadyUi {
-    private static Button readyDeathButton, unreadyDeathButton, pauseButton;
+    private static Button readyDeathButton, unreadyDeathButton, pauseButton, downloadDeathButton, downloadPauseButton;
     private static MultiLineTextWidget line1, line2;
 
     public static Button createButton(int x, int y, int width, int type) {
@@ -24,6 +25,15 @@ public final class ReadyUi {
         } else if (type == 2) {
             b = Button.builder(Component.literal("Не готов").withStyle(ChatFormatting.RED), btn -> action((byte) 2)).bounds(x, y, width, 20).build();
             unreadyDeathButton = b;
+        } else if (type == 3 || type == 4) {
+            b = Button.builder(downloadLabel(), btn -> requestDownload()).bounds(x, y, width, 20).build();
+            if (type == 3) {
+                downloadDeathButton = b;
+            } else {
+                downloadPauseButton = b;
+            }
+            b.visible = ClientReadyState.isWaiting();
+            b.active = ClientReadyState.isWaiting() && !ClientReadyState.isDownloadRequested();
         } else {
             b = Button.builder(pauseLabel(), btn -> action((byte) 0)).bounds(x, y, width, 20).build();
             pauseButton = b;
@@ -63,6 +73,21 @@ public final class ReadyUi {
         return Component.empty().append(status).append("  ").append(ClientReadyState.counter());
     }
 
+    private static Component downloadLabel() {
+        return ClientReadyState.isDownloadRequested()
+                ? Component.literal("Скачивание запрошено").withStyle(ChatFormatting.GRAY)
+                : Component.literal("Скачать мир").withStyle(ChatFormatting.AQUA);
+    }
+
+    private static void requestDownload() {
+        if (ClientReadyState.isDownloadRequested() || !ClientReadyState.isWaiting()) {
+            return;
+        }
+        ClientPlayNetworking.send(new DownloadRequestPayload());
+        ClientReadyState.markDownloadRequested();
+        refresh();
+    }
+
     private static void action(byte mode) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
@@ -77,6 +102,7 @@ public final class ReadyUi {
     public static void refresh() {
         Minecraft mc = Minecraft.getInstance();
         if (!(mc.gui.screen() instanceof DeathScreen)) {
+            downloadDeathButton = null;
             readyDeathButton = null;
             unreadyDeathButton = null;
             line1 = null;
@@ -84,6 +110,7 @@ public final class ReadyUi {
         }
         if (!(mc.gui.screen() instanceof PauseScreen)) {
             pauseButton = null;
+            downloadPauseButton = null;
         }
         boolean waiting = ClientReadyState.isWaiting();
         if (readyDeathButton != null) {
@@ -97,6 +124,13 @@ public final class ReadyUi {
             pauseButton.setMessage(pauseLabel());
             pauseButton.visible = true;
             pauseButton.active = waiting;
+        }
+        for (Button d : new Button[] {downloadDeathButton, downloadPauseButton}) {
+            if (d != null) {
+                d.setMessage(downloadLabel());
+                d.visible = waiting;
+                d.active = waiting && !ClientReadyState.isDownloadRequested();
+            }
         }
         if (line1 != null) {
             line1.setMessage(Component.literal(ClientReadyState.deathLine()));

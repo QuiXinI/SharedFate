@@ -3,6 +3,7 @@
   "package": "quasaris.sharedfate.client.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
+    "CreateWorldScreenAccessor",
     "DeathScreenMixin",
     "PauseScreenMixin"
   ],

@@ -19,6 +19,7 @@ public abstract class PauseScreenMixin extends Screen {
     @Inject(method = "init", at = @At("TAIL"))
     private void sharedfate$addReady(CallbackInfo ci) {
         this.addRenderableWidget(ReadyUi.createButton(this.width / 2 - 100, this.height / 4 + 144, 200, 0));
+        this.addRenderableWidget(ReadyUi.createButton(this.width / 2 - 100, this.height / 4 + 168, 200, 4));
     }
 
     @Inject(method = "tick", at = @At("TAIL"))

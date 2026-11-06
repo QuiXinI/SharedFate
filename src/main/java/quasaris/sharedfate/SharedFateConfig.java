@@ -6,6 +6,7 @@ import java.nio.file.Path;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import net.fabricmc.loader.api.FabricLoader;
 
 public final class SharedFateConfig {
@@ -17,6 +18,8 @@ public final class SharedFateConfig {
     public static class Data {
         public int preparationSeconds = 300;
         public ChunkySettings chunky = new ChunkySettings();
+        public int downloadPort = 25600;
+        public String publicAddress = "127.0.0.1";
     }
 
     public static class ChunkySettings {
@@ -36,14 +39,11 @@ public final class SharedFateConfig {
                 if (parsed != null) {
                     data = parsed;
                 }
-                if (json.contains("preparationMinutes")) {
-                    com.google.gson.JsonObject obj = GSON.fromJson(json, com.google.gson.JsonObject.class);
-                    if (obj != null && obj.has("preparationMinutes")) {
-                        int mins = obj.get("preparationMinutes").getAsInt();
-                        data.preparationSeconds = mins * 60;
-                    }
+                JsonObject obj = GSON.fromJson(json, JsonObject.class);
+                if (obj != null && obj.has("preparationMinutes")) {
+                    data.preparationSeconds = obj.get("preparationMinutes").getAsInt() * 60;
                 }
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
         }
         save();
@@ -58,8 +58,15 @@ public final class SharedFateConfig {
     }
 
     public static long getDurationMs() {
-        int secs = Math.max(0, data.preparationSeconds);
-        return secs * 1000L;
+        return Math.max(0, data.preparationSeconds) * 1000L;
+    }
+
+    public static int getDownloadPort() {
+        return data.downloadPort;
+    }
+
+    public static String getPublicAddress() {
+        return data.publicAddress != null && !data.publicAddress.isBlank() ? data.publicAddress : "127.0.0.1";
     }
 
     public static String getChunkyWorld() {

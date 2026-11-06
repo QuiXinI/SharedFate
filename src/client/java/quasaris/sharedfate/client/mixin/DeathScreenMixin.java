@@ -26,7 +26,7 @@ public abstract class DeathScreenMixin extends Screen {
                 if (text.contains("spectate") || text.contains("respawn") || text.contains("наблюдать") || text.contains("возродиться")) {
                     toRemove.add(btn);
                 } else {
-                    btn.setY(this.height / 4 + 120);
+                    btn.setY(this.height / 4 + 144);
                 }
             }
         }
@@ -36,6 +36,7 @@ public abstract class DeathScreenMixin extends Screen {
 
         this.addRenderableWidget(ReadyUi.createButton(this.width / 2 - 100, this.height / 4 + 72, 200, 1));
         this.addRenderableWidget(ReadyUi.createButton(this.width / 2 - 100, this.height / 4 + 96, 200, 2));
+        this.addRenderableWidget(ReadyUi.createButton(this.width / 2 - 100, this.height / 4 + 120, 200, 3));
         this.addRenderableWidget(ReadyUi.createLine(this.width, this.height - 32, this.font, true));
         this.addRenderableWidget(ReadyUi.createLine(this.width, this.height - 20, this.font, false));
     }

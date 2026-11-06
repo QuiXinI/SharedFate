@@ -31,6 +31,8 @@ public final class ReadyManager {
     }
 
     public static void register() {
+        WorldReset.register();
+
         ServerPlayNetworking.registerGlobalReceiver(ReadyTogglePayload.TYPE,
                 (payload, context) -> onToggle(context.player(), payload.action()));
 
@@ -93,37 +95,41 @@ public final class ReadyManager {
         waiting = true;
         ready.clear();
         deathLine = line;
+        WorldReset.onNewRound();
         deathTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
         broadcast(server);
     }
 
+    public static String currentLabel() {
+        return deathLine + (deathTime.isEmpty() ? "" : " в " + deathTime);
+    }
+
     private static void onToggle(ServerPlayer player, byte action) {
         MinecraftServer server = player.level().getServer();
+        if (server == null) {
+            return;
+        }
         if (action == 3) {
-            sendStateTo(player);
+            sendStateTo(player, server);
+            return;
+        }
+        if (!waiting || WorldReset.isRequested()) {
             return;
         }
 
-        if (!waiting) {
-            return;
-        }
         UUID id = player.getUUID();
         if (action == 1) {
             ready.add(id);
         } else if (action == 2) {
             ready.remove(id);
-        } else {
-            if (!ready.add(id)) {
-                ready.remove(id);
-            }
+        } else if (!ready.add(id)) {
+            ready.remove(id);
         }
-        if (server == null) {
-            return;
-        }
+
         broadcast(server);
 
         int total = server.getPlayerList().getPlayers().size();
-        int readyCount = ready.size();
+        int readyCount = countReady(server);
         if (readyCount < total) {
             server.getPlayerList().broadcastSystemMessage(
                     Component.literal("Готовы " + readyCount + " / " + total + " игроков")
@@ -134,7 +140,7 @@ public final class ReadyManager {
     }
 
     private static void checkAllReady(MinecraftServer server) {
-        if (!waiting) {
+        if (!waiting || WorldReset.isRequested()) {
             return;
         }
         var players = server.getPlayerList().getPlayers();
@@ -146,45 +152,32 @@ public final class ReadyManager {
                 return;
             }
         }
-        onAllReady(server);
-    }
-
-    private static void onAllReady(MinecraftServer server) {
-        int total = server.getPlayerList().getPlayers().size();
         server.getPlayerList().broadcastSystemMessage(
-                Component.literal("Готовы " + total + " / " + total + " игроков")
-                        .withStyle(ChatFormatting.YELLOW), false);
-        server.getPlayerList().broadcastSystemMessage(
-                Component.literal("Готовы все игроки, запускаю пересоздание мира")
+                Component.literal("Все игроки готовы, создаём новый мир...")
                         .withStyle(ChatFormatting.GREEN), false);
-        broadcast(server);
+        WorldReset.begin(server);
     }
 
-    private static void sendStateTo(ServerPlayer player) {
-        MinecraftServer server = player.level().getServer();
-        int total = server != null ? server.getPlayerList().getPlayers().size() : 1;
-        int readyCount = 0;
-        if (server != null) {
-            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                if (ready.contains(p.getUUID())) {
-                    readyCount++;
-                }
+    private static int countReady(MinecraftServer server) {
+        int n = 0;
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+            if (ready.contains(p.getUUID())) {
+                n++;
             }
         }
+        return n;
+    }
+
+    private static void sendStateTo(ServerPlayer player, MinecraftServer server) {
+        int total = server.getPlayerList().getPlayers().size();
         ServerPlayNetworking.send(player,
-                new ReadyStatePayload(waiting, readyCount, total, ready.contains(player.getUUID()), deathLine));
+                new ReadyStatePayload(waiting, countReady(server), total, ready.contains(player.getUUID()), deathLine));
     }
 
     private static void broadcast(MinecraftServer server) {
-        var players = server.getPlayerList().getPlayers();
-        int total = players.size();
-        int readyCount = 0;
-        for (ServerPlayer p : players) {
-            if (ready.contains(p.getUUID())) {
-                readyCount++;
-            }
-        }
-        for (ServerPlayer p : players) {
+        int total = server.getPlayerList().getPlayers().size();
+        int readyCount = countReady(server);
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             ServerPlayNetworking.send(p,
                     new ReadyStatePayload(waiting, readyCount, total, ready.contains(p.getUUID()), deathLine));
         }

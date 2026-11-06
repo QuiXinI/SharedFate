@@ -4,7 +4,7 @@ import net.minecraft.network.chat.Component;
 import quasaris.sharedfate.net.ReadyStatePayload;
 
 public final class ClientReadyState {
-    private static volatile boolean waiting, self;
+    private static volatile boolean waiting, self, downloadRequested;
     private static volatile int ready, total;
     private static volatile String deathLine = "";
 
@@ -14,12 +14,16 @@ public final class ClientReadyState {
         ready = p.ready();
         total = p.total();
         deathLine = p.deathLine();
+        if (!waiting) {
+            downloadRequested = false;
+        }
         ReadyUi.refresh();
     }
 
     public static void reset() {
         waiting = false;
         self = false;
+        downloadRequested = false;
         ready = 0;
         total = 0;
         deathLine = "";
@@ -27,6 +31,8 @@ public final class ClientReadyState {
 
     public static boolean isWaiting() { return waiting; }
     public static boolean isSelfReady() { return self; }
+    public static boolean isDownloadRequested() { return downloadRequested; }
+    public static void markDownloadRequested() { downloadRequested = true; }
     public static String deathLine() { return deathLine; }
 
     public static Component counter() {
