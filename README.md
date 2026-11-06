@@ -1,9 +1,17 @@
 # Shared Fate
 
-## Setup
+Fabric mod for co-op. Ties players together with shared deaths, ready checks, and quick world resets.
 
-For setup instructions, please see the [Fabric Documentation page](https://docs.fabricmc.net/develop/getting-started/creating-a-project#setting-up) related to the IDE that you are using.
+## What it does
 
-## License
+- **Ready Check:** UI and HUD to check who's ready before starting or doing stuff.
+- **Death Sync:** Synchronizes deaths and combat state across players.
+- **World Reset & Restart:** Quick commands/screens to reset the world or restart singleplayer when things go sideways.
+- **World Sync:** Basic downloading and syncing of world files between client and server.
+- **Config:** Configurable via `config/shared-fate.json`.
 
-This template is available under the CC0 license. Feel free to learn from it and incorporate it in your own projects.
+## Building
+
+```bash
+./gradlew build
+```
