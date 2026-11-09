@@ -3,13 +3,12 @@
 	"id": "shared-fate",
 	"version": "${version}",
 	"name": "Shared Fate",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "- Ready Check: UI and HUD to check who's ready before starting or doing stuff.\n- Death Sync: Synchronizes deaths across players.\n- World Reset & Restart: Quick commands/screens to reset the world or restart singleplayer when things go sideways.\n- World Sync: Basic downloading and syncing of world files between client and server.\n- Config: Configurable via `config/shared-fate.json`.",
 	"authors": [
-		"Me!"
+		"QuiXinI"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/QuiXinI/SharedFate"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/shared-fate/icon.png",
