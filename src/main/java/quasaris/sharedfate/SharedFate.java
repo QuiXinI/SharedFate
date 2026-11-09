@@ -23,6 +23,7 @@ public class SharedFate implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(RestartSingleplayerPayload.TYPE, RestartSingleplayerPayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(DownloadRequestPayload.TYPE, DownloadRequestPayload.CODEC);
 
+        // Finish a pending reset before the server loads its world.
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
             WorldReset.applyOnStartup();
         }

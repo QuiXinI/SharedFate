@@ -5,6 +5,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import quasaris.sharedfate.SharedFate;
 
+/** Client -> server: "archive the world when it is reset, so it can be downloaded". */
 public record DownloadRequestPayload() implements CustomPacketPayload {
     public static final Type<DownloadRequestPayload> TYPE =
             new Type<>(Identifier.fromNamespaceAndPath(SharedFate.MOD_ID, "download_request"));

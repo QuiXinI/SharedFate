@@ -1,20 +1,19 @@
 package quasaris.sharedfate;
 
-import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -28,8 +27,21 @@ import quasaris.sharedfate.net.DownloadRequestPayload;
 import quasaris.sharedfate.net.RestartSingleplayerPayload;
 import quasaris.sharedfate.net.WorldResetPayload;
 
+/**
+ * Creates a new world.
+ *
+ * Dedicated server:
+ *   1. freeze and save the old world;
+ *   2. write a new level-name (unique per reset) and a new level-seed to server.properties,
+ *      and a flag file with the old world folder name;
+ *   3. start the same server command again as a new JVM with -Dsharedfate.waitForPid=<this pid>.
+ *      The new JVM (inheriting this terminal) waits for this process to exit, deletes the old
+ *      world folder and starts with the new level-name;
+ *   4. disconnect players with the restart message and halt.
+ *
+ * Singleplayer: the client leaves the world and creates a new one (see SingleplayerRestart).
+ */
 public final class WorldReset {
-    private static final Logger LOG = LoggerFactory.getLogger("SharedFate");
     private static final String FLAG_NAME = "shared-fate-reset.flag";
     private static final String WAIT_PROPERTY = "sharedfate.waitForPid";
 
@@ -46,6 +58,7 @@ public final class WorldReset {
         return requested;
     }
 
+    /** Called when a new death round starts. */
     public static void onNewRound() {
         downloadRequested = false;
     }
@@ -54,7 +67,13 @@ public final class WorldReset {
         ServerPlayNetworking.registerGlobalReceiver(DownloadRequestPayload.TYPE,
                 (payload, context) -> onDownloadRequest(context.player()));
 
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            requested = false;
+            downloadRequested = false;
+        });
+
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            // Only a dedicated server may exit: in singleplayer the process is the game client.
             if (requested && server.isDedicatedServer()) {
                 Runtime.getRuntime().halt(0);
             }
@@ -82,7 +101,7 @@ public final class WorldReset {
                 WorldDownloads.archive(worldDir, label);
                 ok = true;
             } catch (IOException e) {
-                LOG.error("Could not archive world for download", e);
+                DebugLog.error("Could not archive world for download", e);
                 ok = false;
             }
             boolean finalOk = ok;
@@ -109,29 +128,39 @@ public final class WorldReset {
         if (requested) {
             return;
         }
+
         if (!server.isDedicatedServer()) {
             requested = true;
+            boolean hardcore = server.isHardcore();
+            String levelId = server.getWorldPath(LevelResource.ROOT).getFileName().toString();
+            String label = ReadyManager.currentLabel();
+            DebugLog.info("singleplayer reset requested (hardcore=" + hardcore + ", level=" + levelId
+                    + ", label=" + label + ")");
             for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                ServerPlayNetworking.send(p, new RestartSingleplayerPayload());
+                ServerPlayNetworking.send(p, new RestartSingleplayerPayload(hardcore, levelId, label));
             }
             return;
         }
-        requested = true;
-        LOG.info("All players ready: resetting world");
 
+        requested = true;
+        DebugLog.info("all players ready: resetting dedicated server world");
         Path gameDir = FabricLoader.getInstance().getGameDir();
         try {
             server.tickRateManager().setFrozen(true);
             server.saveEverything(true, true, true);
 
-            Path worldDir = server.getWorldPath(LevelResource.ROOT);
-            writeNewSeed(gameDir, new Random().nextLong());
+            String oldLevelName = server.getWorldData().getLevelName();
+            String newLevelName = "world-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+            long newSeed = new Random().nextLong();
             Files.writeString(gameDir.resolve(FLAG_NAME),
-                    "world=" + worldDir.getFileName() + "\n", StandardCharsets.UTF_8);
+                    "world=" + oldLevelName + "\nnewlevel=" + newLevelName + "\nseed=" + newSeed + "\n",
+                    StandardCharsets.UTF_8);
+            DebugLog.info("reset prepared: old level=" + oldLevelName + ", new level-name=" + newLevelName
+                    + ", seed=" + newSeed + " (settings are written by the new JVM after the old one exits)");
 
             scheduleRelaunch(gameDir);
         } catch (Exception e) {
-            LOG.error("World reset aborted, game continues", e);
+            DebugLog.error("World reset aborted, game continues", e);
             abort(server, gameDir);
             return;
         }
@@ -153,64 +182,100 @@ public final class WorldReset {
             ServerPlayNetworking.send(p, new WorldResetPayload(false, ""));
         }
         server.getPlayerList().broadcastSystemMessage(
-                Component.literal("Не удалось пересоздать мир, подробности в логе сервера")
+                Component.literal("Не удалось пересоздать мир, подробности в logs/shared-fate.log")
                         .withStyle(ChatFormatting.RED), false);
     }
 
+    /**
+     * Runs before the server loads its world. The old JVM has exited at this point, so nothing can
+     * overwrite server.properties any more: delete the old world folder and write the new level-name and seed.
+     */
     public static void applyOnStartup() {
         Path gameDir = FabricLoader.getInstance().getGameDir();
         Path flag = gameDir.resolve(FLAG_NAME);
         if (!Files.exists(flag)) {
             return;
         }
+        DebugLog.info("reset flag found, finishing reset");
         String pid = System.getProperty(WAIT_PROPERTY);
         if (pid != null) {
             waitForExit(Long.parseLong(pid.trim()));
         }
         try {
-            String world = null;
+            String oldLevel = null, newLevel = null, seed = null;
             for (String line : Files.readAllLines(flag, StandardCharsets.UTF_8)) {
-                if (line.startsWith("world=")) {
-                    world = line.substring("world=".length()).trim();
-                }
+                if (line.startsWith("world=")) oldLevel = line.substring("world=".length()).trim();
+                if (line.startsWith("newlevel=")) newLevel = line.substring("newlevel=".length()).trim();
+                if (line.startsWith("seed=")) seed = line.substring("seed=".length()).trim();
             }
-            if (world != null && world.matches("[A-Za-z0-9._ -]+") && !world.equals(".") && !world.contains("..")) {
-                Path dir = gameDir.resolve(world);
-                deleteRecursively(dir);
-                LOG.info("Old world removed for reset: {}", world);
+
+            if (oldLevel != null && isSafeName(oldLevel) && !oldLevel.equals(newLevel)) {
+                Path oldDir = gameDir.resolve(oldLevel);
+                deleteRecursively(oldDir);
+                DebugLog.info("old world folder " + oldLevel + " still exists after delete: " + Files.exists(oldDir));
+            } else {
+                DebugLog.info("old world name missing or unsafe (" + oldLevel + "), nothing removed");
             }
+
+            if (newLevel != null && isSafeName(newLevel) && seed != null) {
+                writeWorldSettings(gameDir, Long.parseLong(seed), newLevel);
+                DebugLog.info("server.properties updated: level-name=" + newLevel + ", level-seed=" + seed);
+            } else {
+                DebugLog.info("new level settings missing in flag, server.properties not changed");
+            }
+            DebugLog.info("server.properties now: " + readProperty(gameDir, "level-name")
+                    + " / " + readProperty(gameDir, "level-seed"));
             Files.deleteIfExists(flag);
-        } catch (IOException e) {
-            LOG.error("Failed to finish world reset", e);
+        } catch (IOException | RuntimeException e) {
+            DebugLog.error("Failed to finish world reset", e);
         }
+    }
+
+    private static String readProperty(Path gameDir, String key) {
+        try {
+            Path props = gameDir.resolve("server.properties");
+            if (!Files.exists(props)) {
+                return "(no server.properties)";
+            }
+            return Files.readAllLines(props, StandardCharsets.ISO_8859_1).stream()
+                    .filter(l -> l.startsWith(key + "="))
+                    .findFirst()
+                    .orElse("(not set)");
+        } catch (IOException e) {
+            return "(unreadable)";
+        }
+    }
+
+    private static boolean isSafeName(String name) {
+        return name.matches("[A-Za-z0-9._ -]+") && !name.equals(".") && !name.contains("..");
     }
 
     private static void waitForExit(long pid) {
         ProcessHandle.of(pid).ifPresent(handle -> {
             try {
                 handle.onExit().get(3, TimeUnit.MINUTES);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                DebugLog.error("waiting for previous server process failed", e);
             }
         });
         try {
-            Thread.sleep(2000);
+            Thread.sleep(2000); // give the OS a moment to release ports and file locks
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
     }
 
+    /** The new JVM inherits this terminal, so its output and console stay visible. */
     private static void scheduleRelaunch(Path gameDir) throws IOException {
         List<String> cmd = buildServerCommand();
-        Path log = gameDir.resolve("logs").resolve("shared-fate-relaunch.log");
-        Files.createDirectories(log.getParent());
+        DebugLog.info("relaunch command: " + String.join(" ", cmd));
         new ProcessBuilder(cmd)
                 .directory(gameDir.toFile())
-                .redirectInput(ProcessBuilder.Redirect.from(new File(isWindows() ? "NUL" : "/dev/null")))
-                .redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.appendTo(log.toFile()))
+                .inheritIO()
                 .start();
     }
 
+    /** Rebuilds the command that started this JVM: java, JVM flags, classpath or -jar, main class, args. */
     private static List<String> buildServerCommand() {
         String java = ProcessHandle.current().info().command().orElseGet(() ->
                 Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java").toString());
@@ -226,9 +291,10 @@ public final class WorldReset {
             throw new IllegalStateException("Cannot determine the server command line");
         }
         String first = tokens[0];
-        if (first.equals(classpath)) {
+        if (first.endsWith(".jar")) {
+            // "java -jar server.jar ..." : sun.java.command starts with the jar as it was typed.
             cmd.add("-jar");
-            cmd.add(classpath);
+            cmd.add(first);
         } else {
             cmd.add("-cp");
             cmd.add(classpath);
@@ -238,23 +304,27 @@ public final class WorldReset {
         return cmd;
     }
 
-    private static void writeNewSeed(Path gameDir, long seed) throws IOException {
+    private static void writeWorldSettings(Path gameDir, long seed, String levelName) throws IOException {
         Path props = gameDir.resolve("server.properties");
         List<String> lines = Files.exists(props)
                 ? new ArrayList<>(Files.readAllLines(props, StandardCharsets.ISO_8859_1))
                 : new ArrayList<>();
+        setProperty(lines, "level-seed", Long.toString(seed));
+        setProperty(lines, "level-name", levelName);
+        Files.write(props, lines, StandardCharsets.ISO_8859_1);
+    }
 
+    private static void setProperty(List<String> lines, String key, String value) {
         boolean found = false;
         for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).startsWith("level-seed=")) {
-                lines.set(i, "level-seed=" + seed);
+            if (lines.get(i).startsWith(key + "=")) {
+                lines.set(i, key + "=" + value);
                 found = true;
             }
         }
         if (!found) {
-            lines.add("level-seed=" + seed);
+            lines.add(key + "=" + value);
         }
-        Files.write(props, lines, StandardCharsets.ISO_8859_1);
     }
 
     private static void deleteRecursively(Path dir) throws IOException {

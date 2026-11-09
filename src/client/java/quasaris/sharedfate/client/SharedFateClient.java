@@ -37,7 +37,7 @@ public class SharedFateClient implements ClientModInitializer {
                 ReadyHud::render);
 
         ClientPlayNetworking.registerGlobalReceiver(RestartSingleplayerPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> SingleplayerRestart.begin(context.client())));
+                (payload, context) -> context.client().execute(() -> SingleplayerRestart.begin(context.client(), payload.hardcore(), payload.levelId(), payload.label())));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             ReadyUi.refresh();

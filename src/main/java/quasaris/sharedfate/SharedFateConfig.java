@@ -18,7 +18,9 @@ public final class SharedFateConfig {
     public static class Data {
         public int preparationSeconds = 300;
         public ChunkySettings chunky = new ChunkySettings();
+        /** Port of the world download page, http://<publicAddress>:<downloadPort>/worlds */
         public int downloadPort = 25600;
+        /** Address players see in the link (your server's IP or domain). */
         public String publicAddress = "127.0.0.1";
     }
 

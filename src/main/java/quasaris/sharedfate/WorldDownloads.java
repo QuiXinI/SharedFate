@@ -30,6 +30,10 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 
+/**
+ * Archived worlds and the tiny HTTP page that lists them: http://<address>:<port>/worlds
+ * Only worlds that someone asked to keep are archived. Uses the JDK HTTP server, so no dependencies.
+ */
 public final class WorldDownloads {
     private static final Logger LOG = LoggerFactory.getLogger("SharedFate");
     private static final String INDEX = "index.txt";
@@ -46,6 +50,7 @@ public final class WorldDownloads {
         return "http://" + SharedFateConfig.getPublicAddress() + ":" + SharedFateConfig.getDownloadPort() + "/worlds";
     }
 
+    /** Chat text that opens the URL when clicked. */
     public static Component linkComponent(String url) {
         return Component.literal(url).withStyle(style -> style
                 .withColor(ChatFormatting.AQUA)
@@ -91,6 +96,7 @@ public final class WorldDownloads {
         }
     }
 
+    /** Zips a saved world folder and lists it on the page. Call only while the world is frozen. */
     public static void archive(Path worldDir, String label) throws IOException {
         Files.createDirectories(dir());
         String name = "world-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".zip";
@@ -112,6 +118,7 @@ public final class WorldDownloads {
         LOG.info("World archived for download: {}", name);
     }
 
+    /** Newest first. */
     public static List<Entry> entries() {
         List<Entry> out = new ArrayList<>();
         Path index = dir().resolve(INDEX);

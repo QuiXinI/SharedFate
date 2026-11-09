@@ -17,10 +17,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
+/**
+ * Preparation phase of a fresh world: mob AI is frozen (see MobSpawnMixin), Chunky pregenerates,
+ * and the server list description shows the progress, refreshed every 10 seconds.
+ * Distant Horizons is left enabled all the time.
+ */
 public final class WorldStartPhase {
     private static final Logger LOG = LoggerFactory.getLogger("SharedFate");
     private static final long TICK_MS = 50;
-    private static final int MOTD_INTERVAL_TICKS = 200;
+    private static final int MOTD_INTERVAL_TICKS = 200; // 10 s
     private static final int CHUNKY_POLL_DELAY_TICKS = 40;
 
     public static volatile Component chunkyStatus = Component.empty();
@@ -160,6 +165,7 @@ public final class WorldStartPhase {
         }
     }
 
+    /** Polling catches completion even if the Chunky event never fires. */
     private static void pollChunky() {
         try {
             var api = org.popcraft.chunky.ChunkyProvider.get().getApi();
@@ -210,6 +216,7 @@ public final class WorldStartPhase {
         }
     }
 
+    /** Server list description: prep timer, plus Chunky progress while it runs. */
     private static String motdText() {
         if (!active) {
             return originalMotd != null ? originalMotd : "";

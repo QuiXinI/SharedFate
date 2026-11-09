@@ -32,6 +32,8 @@ public final class ReadyManager {
 
     public static void register() {
         WorldReset.register();
+        // Static state would otherwise leak from one singleplayer world into the next.
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> reset());
 
         ServerPlayNetworking.registerGlobalReceiver(ReadyTogglePayload.TYPE,
                 (payload, context) -> onToggle(context.player(), payload.action()));
@@ -91,7 +93,14 @@ public final class ReadyManager {
         });
     }
 
+    public static void reset() {
+        waiting = false;
+        ready.clear();
+        deathLine = "";
+    }
+
     public static void beginWaiting(MinecraftServer server, String line) {
+        DebugLog.info("waiting for ready after death: " + line);
         waiting = true;
         ready.clear();
         deathLine = line;
@@ -100,6 +109,8 @@ public final class ReadyManager {
         broadcast(server);
     }
 
+    /** action: 0 = toggle, 1 = ready, 2 = not ready, 3 = just send state. */
+    /** Text for the archive list, e.g. "Игрок X умер от Y в 12:30:05". */
     public static String currentLabel() {
         return deathLine + (deathTime.isEmpty() ? "" : " в " + deathTime);
     }
@@ -127,6 +138,8 @@ public final class ReadyManager {
         }
 
         broadcast(server);
+        DebugLog.info("ready toggle: action=" + action + " player=" + player.getName().getString()
+                + " ready=" + countReady(server) + "/" + server.getPlayerList().getPlayers().size());
 
         int total = server.getPlayerList().getPlayers().size();
         int readyCount = countReady(server);
