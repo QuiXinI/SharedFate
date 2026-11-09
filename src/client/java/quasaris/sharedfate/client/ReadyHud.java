@@ -16,7 +16,7 @@ public final class ReadyHud {
         int sh = mc.getWindow().getGuiScaledHeight();
 
         Component l1 = Component.literal(ClientReadyState.deathLine());
-        Component l2 = Component.literal("Готовы: ").append(ClientReadyState.counter());
+        Component l2 = Component.translatable("gui.shared-fate.ready_count_prefix").append(ClientReadyState.counter());
 
         graphics.text(mc.font, l1, (sw - mc.font.width(l1)) / 2, sh - 58, 0xFFFFFFFF, true);
         graphics.text(mc.font, l2, (sw - mc.font.width(l2)) / 2, sh - 47, 0xFFFFFFFF, true);

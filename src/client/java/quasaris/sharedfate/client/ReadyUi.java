@@ -23,7 +23,7 @@ public final class ReadyUi {
             b = Button.builder(readyLabel(), btn -> action((byte) 1)).bounds(x, y, width, 20).build();
             readyDeathButton = b;
         } else if (type == 2) {
-            b = Button.builder(Component.literal("Не готов").withStyle(ChatFormatting.RED), btn -> action((byte) 2)).bounds(x, y, width, 20).build();
+            b = Button.builder(Component.translatable("gui.shared-fate.not_ready").withStyle(ChatFormatting.RED), btn -> action((byte) 2)).bounds(x, y, width, 20).build();
             unreadyDeathButton = b;
         } else if (type == 3 || type == 4) {
             b = Button.builder(downloadLabel(), btn -> requestDownload()).bounds(x, y, width, 20).build();
@@ -59,24 +59,24 @@ public final class ReadyUi {
     }
 
     private static Component readyLabel() {
-        Component status = Component.literal("Готов").withStyle(ChatFormatting.GREEN);
+        Component status = Component.translatable("gui.shared-fate.ready").withStyle(ChatFormatting.GREEN);
         return Component.empty().append(status).append("  ").append(ClientReadyState.counter());
     }
 
     private static Component pauseLabel() {
         if (!ClientReadyState.isWaiting()) {
-            return Component.literal("Готовность (недоступно)").withStyle(ChatFormatting.GRAY);
+            return Component.translatable("gui.shared-fate.ready_unavailable").withStyle(ChatFormatting.GRAY);
         }
         Component status = ClientReadyState.isSelfReady()
-                ? Component.literal("Готов").withStyle(ChatFormatting.GREEN)
-                : Component.literal("Не готов").withStyle(ChatFormatting.RED);
+                ? Component.translatable("gui.shared-fate.ready").withStyle(ChatFormatting.GREEN)
+                : Component.translatable("gui.shared-fate.not_ready").withStyle(ChatFormatting.RED);
         return Component.empty().append(status).append("  ").append(ClientReadyState.counter());
     }
 
     private static Component downloadLabel() {
         return ClientReadyState.isDownloadRequested()
-                ? Component.literal("Скачивание запрошено").withStyle(ChatFormatting.GRAY)
-                : Component.literal("Скачать мир").withStyle(ChatFormatting.AQUA);
+                ? Component.translatable("gui.shared-fate.download_requested").withStyle(ChatFormatting.GRAY)
+                : Component.translatable("gui.shared-fate.download_world").withStyle(ChatFormatting.AQUA);
     }
 
     private static void requestDownload() {
@@ -136,7 +136,7 @@ public final class ReadyUi {
             line1.setMessage(Component.literal(ClientReadyState.deathLine()));
         }
         if (line2 != null) {
-            line2.setMessage(Component.literal("Готовы: ").append(ClientReadyState.counter()));
+            line2.setMessage(Component.translatable("gui.shared-fate.ready_count_prefix").append(ClientReadyState.counter()));
         }
     }
 

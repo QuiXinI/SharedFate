@@ -3,6 +3,7 @@ package quasaris.sharedfate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -19,34 +20,12 @@ public final class DeathSync {
     private static boolean propagating = false;
     public static boolean enabled = true;
 
-    private static final Map<String, String> CAUSES = Map.ofEntries(
-            Map.entry("fall", "падения"),
-            Map.entry("lava", "лавы"),
-            Map.entry("inFire", "огня"),
-            Map.entry("onFire", "горения"),
-            Map.entry("drown", "утопления"),
-            Map.entry("starve", "голода"),
-            Map.entry("outOfWorld", "падения в бездну"),
-            Map.entry("explosion", "взрыва"),
-            Map.entry("magic", "магии"),
-            Map.entry("wither", "иссушения"),
-            Map.entry("cactus", "кактуса"),
-            Map.entry("sweetBerryBush", "ягодного куста"),
-            Map.entry("freeze", "замерзания"),
-            Map.entry("lightningBolt", "удара молнии"),
-            Map.entry("hotFloor", "раскалённого пола"),
-            Map.entry("inWall", "удушья в стене"),
-            Map.entry("cramming", "давки"),
-            Map.entry("flyIntoWall", "удара о стену на элитрах"),
-            Map.entry("fallingBlock", "упавшего блока"),
-            Map.entry("anvil", "наковальни"),
-            Map.entry("stalagmite", "сталагмита"),
-            Map.entry("fallingStalactite", "сталактита"),
-            Map.entry("dragonBreath", "дыхания дракона"),
-            Map.entry("thorns", "шипов"),
-            Map.entry("dryout", "высыхания"),
-            Map.entry("genericKill", "команды kill"),
-            Map.entry("generic", "неизвестной причины"));
+    private static final Set<String> KNOWN_CAUSES = Set.of(
+            "fall", "lava", "inFire", "onFire", "drown", "starve", "outOfWorld",
+            "explosion", "magic", "wither", "cactus", "sweetBerryBush", "freeze",
+            "lightningBolt", "hotFloor", "inWall", "cramming", "flyIntoWall",
+            "fallingBlock", "anvil", "stalagmite", "fallingStalactite", "dragonBreath",
+            "thorns", "dryout", "genericKill", "generic");
 
     public static void register() {
         ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> {
@@ -86,19 +65,19 @@ public final class DeathSync {
     }
 
     private static Component buildMessage(ServerPlayer dead, DamageSource source) {
-        return Component.literal("Игрок ")
-                .append(dead.getDisplayName())
-                .append(" умер от ")
-                .append(describeCause(source));
+        return Component.translatable("death.shared-fate.message", dead.getDisplayName(), describeCause(source));
     }
 
     private static Component describeCause(DamageSource source) {
         Entity attacker = source.getEntity() != null ? source.getEntity() : source.getDirectEntity();
         if (attacker != null) {
-            return Component.literal("атаки (").append(attacker.getDisplayName()).append(")");
+            return Component.translatable("death.shared-fate.cause.attack", attacker.getDisplayName());
         }
         String id = source.type().msgId();
-        return Component.literal(CAUSES.getOrDefault(id, id));
+        if (KNOWN_CAUSES.contains(id)) {
+            return Component.translatable("death.shared-fate.cause." + id);
+        }
+        return Component.translatable("death.shared-fate.cause.generic");
     }
 
     private DeathSync() {}

@@ -43,7 +43,7 @@ public final class ReadyManager {
                     .executes(context -> {
                         ServerPlayer player = context.getSource().getPlayerOrException();
                         if (!waiting) {
-                            context.getSource().sendFailure(Component.literal("Опрос готовности сейчас не активен."));
+                            context.getSource().sendFailure(Component.translatable("command.shared-fate.ready_inactive"));
                             return 0;
                         }
                         onToggle(player, (byte) 1);
@@ -54,7 +54,7 @@ public final class ReadyManager {
                     .executes(context -> {
                         ServerPlayer player = context.getSource().getPlayerOrException();
                         if (!waiting) {
-                            context.getSource().sendFailure(Component.literal("Опрос готовности сейчас не активен."));
+                            context.getSource().sendFailure(Component.translatable("command.shared-fate.ready_inactive"));
                             return 0;
                         }
                         onToggle(player, (byte) 2);
@@ -110,9 +110,8 @@ public final class ReadyManager {
     }
 
     /** action: 0 = toggle, 1 = ready, 2 = not ready, 3 = just send state. */
-    /** Text for the archive list, e.g. "Игрок X умер от Y в 12:30:05". */
     public static String currentLabel() {
-        return deathLine + (deathTime.isEmpty() ? "" : " в " + deathTime);
+        return deathLine + (deathTime.isEmpty() ? "" : Component.translatable("death.shared-fate.at_time", deathTime).getString());
     }
 
     private static void onToggle(ServerPlayer player, byte action) {
@@ -145,7 +144,7 @@ public final class ReadyManager {
         int readyCount = countReady(server);
         if (readyCount < total) {
             server.getPlayerList().broadcastSystemMessage(
-                    Component.literal("Готовы " + readyCount + " / " + total + " игроков")
+                    Component.translatable("text.shared-fate.ready_status_broadcast", readyCount, total)
                             .withStyle(ChatFormatting.YELLOW), false);
         } else {
             checkAllReady(server);
@@ -166,7 +165,7 @@ public final class ReadyManager {
             }
         }
         server.getPlayerList().broadcastSystemMessage(
-                Component.literal("Все игроки готовы, создаём новый мир...")
+                Component.translatable("text.shared-fate.all_ready_resetting")
                         .withStyle(ChatFormatting.GREEN), false);
         WorldReset.begin(server);
     }

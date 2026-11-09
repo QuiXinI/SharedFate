@@ -64,7 +64,7 @@ public final class WorldDownloads {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             if (!entries().isEmpty()) {
                 handler.getPlayer().sendSystemMessage(
-                        Component.literal("Скачать сохранённые миры: ").append(linkComponent(url())), false);
+                        Component.translatable("text.shared-fate.download_worlds_link").append(linkComponent(url())), false);
             }
         });
     }
@@ -178,13 +178,13 @@ public final class WorldDownloads {
 
     private static String page() {
         StringBuilder sb = new StringBuilder();
-        sb.append("<!doctype html><html><head><meta charset=\"utf-8\"><title>Миры сервера</title></head><body><ul>");
+        sb.append("<!doctype html><html><head><meta charset=\"utf-8\"><title>Server Worlds</title></head><body><ul>");
         for (Entry e : entries()) {
             sb.append("<li><a href=\"").append(PREFIX).append(e.file()).append("\">")
                     .append(escape(e.label())).append("</a></li>");
         }
         if (entries().isEmpty()) {
-            sb.append("<li>Пока нет сохранённых миров</li>");
+            sb.append("<li>No saved worlds yet</li>");
         }
         return sb.append("</ul></body></html>").toString();
     }

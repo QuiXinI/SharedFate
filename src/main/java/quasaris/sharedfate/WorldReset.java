@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
@@ -46,9 +45,9 @@ public final class WorldReset {
     private static final String WAIT_PROPERTY = "sharedfate.waitForPid";
 
     private static final Component RESTART_MESSAGE = Component.empty()
-            .append(Component.literal("Сервер ушёл на рестарт").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+            .append(Component.translatable("text.shared-fate.server_restart_title").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
             .append(Component.literal("\n"))
-            .append(Component.literal("Создаётся новый мир. Переподключитесь через пару минут.")
+            .append(Component.translatable("text.shared-fate.server_restart_subtitle")
                     .withStyle(ChatFormatting.GRAY));
 
     private static boolean requested = false;
@@ -87,7 +86,7 @@ public final class WorldReset {
         }
         downloadRequested = true;
         server.getPlayerList().broadcastSystemMessage(
-                Component.literal(player.getName().getString() + " запросил скачивание мира, архив готовится...")
+                Component.translatable("text.shared-fate.download_requested_broadcast", player.getName().getString())
                         .withStyle(ChatFormatting.AQUA), false);
 
         server.tickRateManager().setFrozen(true);
@@ -111,11 +110,11 @@ public final class WorldReset {
                 }
                 if (finalOk) {
                     server.getPlayerList().broadcastSystemMessage(
-                            Component.literal("Мир готов к скачиванию: ")
+                            Component.translatable("text.shared-fate.download_ready_broadcast")
                                     .append(WorldDownloads.linkComponent(WorldDownloads.url())), false);
                 } else {
                     server.getPlayerList().broadcastSystemMessage(
-                            Component.literal("Не удалось подготовить архив мира, см. лог сервера")
+                            Component.translatable("text.shared-fate.download_failed_broadcast")
                                     .withStyle(ChatFormatting.RED), false);
                 }
             });
@@ -182,7 +181,7 @@ public final class WorldReset {
             ServerPlayNetworking.send(p, new WorldResetPayload(false, ""));
         }
         server.getPlayerList().broadcastSystemMessage(
-                Component.literal("Не удалось пересоздать мир, подробности в logs/shared-fate.log")
+                Component.translatable("text.shared-fate.reset_failed_broadcast")
                         .withStyle(ChatFormatting.RED), false);
     }
 

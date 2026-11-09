@@ -57,7 +57,7 @@ public final class WorldStartPhase {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             if (chunkyMissing) {
                 handler.getPlayer().sendSystemMessage(
-                        Component.literal("Chunky не установлен, пропускаю подготовку мира")
+                        Component.translatable("text.shared-fate.chunky_missing")
                                 .withStyle(ChatFormatting.RED), false);
             }
         });
@@ -148,7 +148,7 @@ public final class WorldStartPhase {
             api.onGenerationProgress(event -> {
                 if (event.world().equals(worldName)) {
                     chunkyPercent = (float) event.progress();
-                    chunkyStatus = Component.literal(String.format("Chunky: %.1f%%", event.progress()))
+                    chunkyStatus = Component.translatable("text.shared-fate.chunky_progress", String.format("%.1f", event.progress()))
                             .withStyle(ChatFormatting.AQUA);
                 }
             });
@@ -160,7 +160,7 @@ public final class WorldStartPhase {
             });
         } catch (Throwable e) {
             LOG.warn("Chunky could not be started", e);
-            chunkyStatus = Component.literal("Chunky ошибка: " + e.getMessage()).withStyle(ChatFormatting.RED);
+            chunkyStatus = Component.translatable("text.shared-fate.chunky_error", e.getMessage()).withStyle(ChatFormatting.RED);
             chunkyDone = true;
         }
     }
@@ -183,7 +183,7 @@ public final class WorldStartPhase {
         }
         chunkyDone = true;
         chunkyPercent = 100f;
-        chunkyStatus = Component.literal("Chunky завершен").withStyle(ChatFormatting.GREEN);
+        chunkyStatus = Component.translatable("text.shared-fate.chunky_complete").withStyle(ChatFormatting.GREEN);
     }
 
     private static void end(MinecraftServer server) {
@@ -200,7 +200,7 @@ public final class WorldStartPhase {
         if (originalMotd != null) {
             server.setMotd(originalMotd);
         }
-        broadcastActionBar(server, Component.literal("Подготовка завершена: мобы включены")
+        broadcastActionBar(server, Component.translatable("text.shared-fate.prep_complete")
                 .withStyle(ChatFormatting.GREEN));
     }
 
@@ -221,11 +221,11 @@ public final class WorldStartPhase {
         if (!active) {
             return originalMotd != null ? originalMotd : "";
         }
-        String line = "§eПодготовка мира: " + timeLeft();
+        String time = timeLeft();
         if (!chunkyMissing && chunkyStarted && !chunkyDone) {
-            line += String.format(" §b| Chunky %.1f%%", chunkyPercent);
+            return Component.translatable("text.shared-fate.prep_motd_chunky", time, String.format("%.1f", chunkyPercent)).getString();
         }
-        return line;
+        return Component.translatable("text.shared-fate.prep_motd", time).getString();
     }
 
     private static String timeLeft() {
@@ -234,7 +234,7 @@ public final class WorldStartPhase {
     }
 
     private static Component statusLine() {
-        Component line = Component.literal("Подготовка мира: " + timeLeft()).withStyle(ChatFormatting.YELLOW);
+        Component line = Component.translatable("text.shared-fate.prep_status", timeLeft()).withStyle(ChatFormatting.YELLOW);
         if (!chunkyStatus.getString().isEmpty()) {
             return Component.empty().append(line)
                     .append(Component.literal("  |  ").withStyle(ChatFormatting.GRAY))
